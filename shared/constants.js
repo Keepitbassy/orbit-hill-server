@@ -51,8 +51,7 @@ export const TEAM_SIZE = 4;                // maximo 4 jugadores por equipo
 // ───────────────────────────────────────────────────────────── modos de juego
 // El anfitrión elige el modo en el lobby (o entre rondas) y el servidor lo
 // valida. `koth` conserva las reglas originales de rey de la colina.
-// Small, phone-friendly online playlist. The server validates against this.
-export const MODES = ['koth', 'chaos'];
+export const MODES = ['koth', 'tdm', 'ffa', 'arcade', 'asteroids', 'asteroids3', 'stocks', 'chaos'];
 export const MODE_DEFAULT = 'koth';
 
 export const KILLS_TO_WIN = { tdm: 25, ffa: 15 };
@@ -136,10 +135,10 @@ export const POWERUP = {
   // Caos Orbital: el mapa mantiene objetos en circulación aun cuando nadie
   // esté rompiendo rocas. Los valores viven aquí para que servidor y HUD
   // hablen del mismo catálogo.
-  chaosMaxActive: 30,
+  chaosMaxActive: 38,
   chaosDropChance: 0.82,
-  chaosAmbientEvery: 3.5,
-  chaosAmbientBatch: 2,
+  chaosAmbientEvery: 2.6,
+  chaosAmbientBatch: 3,
   chaosRespawnSeconds: 0.8,
   chaosProtectSeconds: 1.2,
   overdriveSeconds: 7,
@@ -151,14 +150,20 @@ export const POWERUP = {
   barrageSeconds: 8,
   barrageCount: 5,
   barrageAngle: 0.13,
+  novaSeconds: 8,
+  novaRadius: 190,
+  novaDamage: 74,
+  novaCoverDamage: 145,
+  blinkDistance: 300,
+  blinkShieldSeconds: 1.6,
   jamSeconds: 4,
   volatileDamage: 42,
 };
 
 export const POWERUP_TYPES = [
   'repair', 'shield', 'rapid', 'spread',
-  'laser', 'heavy', 'homing', 'mine', 'barrage',
-  'overdrive', 'magnet', 'leech',
+  'laser', 'heavy', 'homing', 'mine', 'barrage', 'nova',
+  'overdrive', 'magnet', 'leech', 'blink',
   // Riesgos exclusivos de Caos: se ven como objetos del mapa y se activan
   // al tocarlos, igual que una ayuda.
   'jam', 'volatile',
@@ -186,9 +191,11 @@ export const POWERUP_INFO = {
   homing: { label: 'Misil guiado', short: 'HOM', color: '#7aa7ff', icon: '➤' },
   mine: { label: 'Mina de proximidad', short: 'MIN', color: '#ff6b5e', icon: '✹' },
   barrage: { label: 'Ráfaga de cinco', short: 'RAF', color: '#ffcc66', icon: '✦' },
+  nova: { label: 'Cañón nova', short: 'NOVA', color: '#ff75f4', icon: '✹' },
   overdrive: { label: 'Sobremarcha', short: 'SPD', color: '#56f0d3', icon: '»' },
   magnet: { label: 'Imán de botín', short: 'MAG', color: '#c38cff', icon: '◉' },
   leech: { label: 'Drenaje vital', short: 'VMP', color: '#ff6fae', icon: '♥' },
+  blink: { label: 'Motor de salto', short: 'BLINK', color: '#72f6ff', icon: '↯' },
   jam: { label: 'Pulso EMP', short: 'EMP', color: '#b9a6ff', icon: '⌁' },
   volatile: { label: 'Carga volátil', short: '¡!', color: '#ff475f', icon: '✹' },
 };

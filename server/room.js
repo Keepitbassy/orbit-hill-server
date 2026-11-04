@@ -59,6 +59,7 @@ export class Room {
       arena: settings?.arena,
       hillSeconds: settings?.hillSeconds,
       stocks: settings?.stocks,
+      teamTargets: settings?.teamTargets,
       // Ciudadela es el campo de batalla por defecto de las SALAS nuevas; la
       // API directa de Match sigue arrancando en `orbit`.
       battlefield: settings?.battlefield ?? BATTLEFIELD_DEFAULT,
@@ -83,6 +84,8 @@ export class Room {
   get rules() {
     return this.match.rules;
   }
+
+  teamTarget(team) { return this.match.teamTargets?.[team] ?? TEAM_SIZE; }
 
   get arena() {
     return this.match.arena;
@@ -150,14 +153,13 @@ export class Room {
     } else {
       const players = this.match.list();
       if (team && TEAMS.includes(team)) {
-        const check = canChooseTeam(players, team);
-        if (!check.ok) return { ok: false, reason: check.reason };
+        if (teamCounts(players).humans[team] >= this.teamTarget(team)) return { ok: false, reason: 'equipo_lleno' };
         chosen = team;
       } else {
-        chosen = suggestedTeam(players, null);
+        chosen = TEAMS.find((candidate) => teamCounts(players).humans[candidate] < this.teamTarget(candidate)) ?? null;
       }
       if (!chosen) return { ok: false, reason: 'equipo_lleno' };
-      if (this.match.listTeam(chosen).length >= TEAM_SIZE) this.match.removeBotFrom(chosen);
+      if (this.match.listTeam(chosen).length >= this.teamTarget(chosen)) this.match.removeBotFrom(chosen);
     }
 
     const player = this.match.addPlayer(client.playerId, { name, bot: false, team: chosen, slot });
@@ -219,10 +221,9 @@ export class Room {
     if (!TEAMS.includes(team)) return { ok: false, reason: 'equipo_invalido' };
     if (client.team === team) return { ok: true, team };
     const others = this.match.list().filter((p) => p.id !== client.playerId);
-    const check = canChooseTeam(others, team);
-    if (!check.ok) return check;
+    if (teamCounts(others).humans[team] >= this.teamTarget(team)) return { ok: false, reason: 'equipo_lleno' };
 
-    if (this.match.listTeam(team).length >= TEAM_SIZE) this.match.removeBotFrom(team);
+    if (this.match.listTeam(team).length >= this.teamTarget(team)) this.match.removeBotFrom(team);
     this.match.setTeam(client.playerId, team);
     client.team = team;
     this.refillBots();
@@ -256,9 +257,10 @@ export class Room {
       const counts = { cyan: 0, coral: 0 };
       for (const h of humans) {
         const preferred = TEAMS.includes(h.team) ? h.team : null;
-        let team = preferred && counts[preferred] < TEAM_SIZE ? preferred : null;
+        let team = preferred && counts[preferred] < this.teamTarget(preferred) ? preferred : null;
         if (!team) {
-          team = counts.cyan < TEAM_SIZE && counts.cyan <= counts.coral ? 'cyan' : counts.coral < TEAM_SIZE ? 'coral' : 'cyan';
+          team = counts.cyan < this.teamTarget('cyan') && counts.cyan <= counts.coral ? 'cyan'
+            : counts.coral < this.teamTarget('coral') ? 'coral' : 'cyan';
         }
         counts[team] += 1;
         this.match.setTeam(h.id, team);
@@ -404,7 +406,8 @@ export class Room {
         color: TEAM_COLORS[p.team] ?? '#9fc4ff',
       })),
       teams: teamCounts(players),
-      maxPerTeam: info.teamBased ? TEAM_SIZE : 0,
+      maxPerTeam: info.teamBased ? Math.max(this.teamTarget('cyan'), this.teamTarget('coral')) : 0,
+      teamTargets: info.teamBased ? this.match.teamTargets : null,
       maxHumans: MAX_HUMANS_PER_ROOM,
       target: info.target,
       timeLimit: info.timeLimit,

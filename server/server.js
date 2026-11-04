@@ -165,6 +165,13 @@ export function createGameServer(options = {}) {
     // Campo de batalla opcional (Ciudadela por defecto en las salas nuevas).
     // Viaja APARTE de `settings` para no alterar el contrato existente.
     settings.battlefield = BATTLEFIELD_DEFAULT;
+    const teamCyan = Number(msg.teamCyan ?? 4);
+    const teamCoral = Number(msg.teamCoral ?? 4);
+    if (!Number.isInteger(teamCyan) || !Number.isInteger(teamCoral) || teamCyan < 1 || teamCyan > TEAM_SIZE || teamCoral < 1 || teamCoral > TEAM_SIZE) {
+      client.send({ t: 'error', code: 'equipos_invalidos', message: 'Cada equipo debe tener entre 1 y 4 pilotos.' });
+      return;
+    }
+    settings.teamTargets = { cyan: teamCyan, coral: teamCoral };
     if (msg.battlefield !== undefined) {
       const battlefield = sanitizeBattlefield(msg.battlefield);
       if (!battlefield) {

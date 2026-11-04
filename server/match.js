@@ -76,7 +76,7 @@ const COVER_KINDS = ['wall', 'block', 'hex'];
 const PAD_REACH = 26;
 
 const rand = (rng, a, b) => a + rng() * (b - a);
-const BUFF_TYPES = ['shield', 'rapid', 'spread', 'laser', 'heavy', 'homing', 'mine', 'barrage', 'overdrive', 'magnet', 'leech', 'jam'];
+const BUFF_TYPES = ['shield', 'rapid', 'spread', 'laser', 'heavy', 'homing', 'mine', 'barrage', 'overdrive', 'magnet', 'leech', 'jam', 'nova'];
 // Un respawn "pendiente" dura segundos; un eliminado queda prácticamente para
 // siempre. El umbral separa ambos casos sin usar Infinity (JSON no lo soporta).
 const ELIMINATED_AFTER = 1e5;
@@ -105,6 +105,7 @@ export class Match {
     dashCooldown = TACTICAL.dash.cooldown,
     dashSpeed = TACTICAL.dash.speed,
     stocks = STOCKS_DEFAULT,
+    teamTargets = null,
   } = {}) {
     this.rng = rng;
     this.seed = seed;
@@ -121,6 +122,7 @@ export class Match {
     this.dashCooldown = sanitizeDashCooldown(dashCooldown);
     this.dashSpeed = Number.isFinite(dashSpeed) ? clamp(dashSpeed, 100, 700) : TACTICAL.dash.speed;
     this.stocks = STOCK_OPTIONS.includes(Number(stocks)) ? Number(stocks) : STOCKS_DEFAULT;
+    this.teamTargets = Object.freeze({ cyan: Math.min(TEAM_SIZE, Math.max(1, Number(teamTargets?.cyan) || TEAM_SIZE)), coral: Math.min(TEAM_SIZE, Math.max(1, Number(teamTargets?.coral) || TEAM_SIZE)) });
     // ── arena, campo de batalla y colina PROPIAS de esta partida ────────────
     // Nunca se usan los objetos globales WORLD/HILL para simular: cada Match
     // posee su `this.world` y su `this.hill`, así dos salas no se pisan.
@@ -689,7 +691,7 @@ export class Match {
       return added;
     }
     for (const team of TEAMS) {
-      while (this.listTeam(team).length < TEAM_SIZE) {
+      while (this.listTeam(team).length < this.teamTargets[team]) {
         this.addBot(team);
         added += 1;
       }
@@ -1446,6 +1448,7 @@ export class Match {
   /** Cañón automático clásico (con cadencias y topes por buff). */
   fireAuto(p) {
     const special = p.buffs.mine > 0 ? { speed: 0, life: 8, damage: 90, radius: 6, kind: 'mine' }
+      : p.buffs.nova > 0 ? { speed: 360, life: 1.25, damage: 0, radius: 9, kind: 'nova' }
       : p.buffs.laser > 0 ? { speed: 1800, life: .18, damage: 14, kind: 'laser' }
       : p.buffs.homing > 0 ? { speed: 520, life: 2.2, damage: 28, kind: 'homing' }
       : null;
@@ -1467,8 +1470,9 @@ export class Match {
       const angle = barrage ? POWERUP.barrageAngle : POWERUP.spreadAngle;
       const offset = n > 1 ? (i - (n - 1) / 2) * angle : 0;
       const b = spawnBullet(p, ++this.ids.bullet, offset, this.world, special ?? (p.buffs.heavy > 0 ? { damage: 12, kind: 'heavy' } : undefined));
+      if (b.kind === 'nova') b.blast = { radius: POWERUP.novaRadius, damage: POWERUP.novaDamage, coverDamage: POWERUP.novaCoverDamage, label: 'nova' };
       this.bullets.push(b);
-      this.emit({ k: 'shoot', x: Math.round(b.x), y: Math.round(b.y), team: p.team });
+      this.emit({ k: 'shoot', x: Math.round(b.x), y: Math.round(b.y), team: p.team, w: b.kind === 'auto' ? undefined : b.kind });
     }
     p.fireCd = cooldown;
     return n;
@@ -1601,7 +1605,7 @@ export class Match {
       const kind = b.kind ?? 'auto';
       // Proyectiles con detonación propia (boomer / humo): NUNCA dañan al
       // tocar, su efecto lo resuelve su propia deflagración.
-      if (kind === 'boomer') {
+      if (kind === 'boomer' || kind === 'nova') {
         if (this.stepBoomer(b, dt)) survivors.push(b);
         continue;
       }
@@ -1750,7 +1754,7 @@ export class Match {
    *  - rocas: 85 a las que caigan dentro
    */
   boomerBlast(b, x, y) {
-    const A = ARSENAL.boomer;
+    const A = b.blast ?? ARSENAL.boomer;
     const world = this.world;
     // LOS calculada contra una COPIA de las coberturas VIVAS hecha ANTES de
     // dañarlas: si esta misma explosión rompe la pared, esa pared sigue
@@ -1785,7 +1789,7 @@ export class Match {
       }
     }
 
-    this.emit({ k: 'blast', id: b.owner, x: Math.round(x), y: Math.round(y), team: b.team, w: 'boomer' });
+    this.emit({ k: 'blast', id: b.owner, x: Math.round(x), y: Math.round(y), team: b.team, w: A.label ?? 'boomer' });
     return true;
   }
 
@@ -2229,6 +2233,10 @@ export class Match {
         if (this.mode !== 'chaos') break;
         p.buffs.barrage = Math.max(p.buffs.barrage, POWERUP.barrageSeconds);
         break;
+      case 'nova':
+        if (this.mode !== 'chaos') break;
+        p.buffs.nova = Math.max(p.buffs.nova, POWERUP.novaSeconds);
+        break;
       case 'overdrive':
         if (this.mode !== 'chaos') break;
         p.buffs.overdrive = Math.max(p.buffs.overdrive, POWERUP.overdriveSeconds);
@@ -2241,6 +2249,13 @@ export class Match {
         if (this.mode !== 'chaos') break;
         p.buffs.leech = Math.max(p.buffs.leech, POWERUP.leechSeconds);
         break;
+      case 'blink':
+        if (this.mode !== 'chaos') break;
+        p.x = wrap(p.x + Math.cos(p.angle) * POWERUP.blinkDistance, this.world.w);
+        p.y = wrap(p.y + Math.sin(p.angle) * POWERUP.blinkDistance, this.world.h);
+        p.buffs.shield = Math.max(p.buffs.shield, POWERUP.blinkShieldSeconds);
+        this.emit({ k: 'blink', id: p.id, x: Math.round(p.x), y: Math.round(p.y), team: p.team, pu: pu.type });
+        return true;
       case 'jam':
         if (this.mode !== 'chaos') break;
         p.buffs.jam = Math.max(p.buffs.jam, POWERUP.jamSeconds);
@@ -2272,10 +2287,10 @@ export class Match {
 
   activateChaosWeapon(p) {
     if (this.mode !== 'chaos') return false;
-    const sequence = ['laser', 'heavy', 'homing', 'mine', 'barrage', 'sniper', 'boomer', 'plasma'];
+    const sequence = ['laser', 'heavy', 'homing', 'mine', 'barrage', 'nova', 'sniper', 'boomer', 'plasma'];
     const weapon = sequence[p.chaosWeaponIndex = ((p.chaosWeaponIndex ?? -1) + 1) % sequence.length];
-    p.buffs.laser = p.buffs.heavy = p.buffs.homing = p.buffs.mine = p.buffs.barrage = p.buffs.rapid = p.buffs.spread = 0;
-    if (weapon === 'laser' || weapon === 'heavy' || weapon === 'homing' || weapon === 'mine' || weapon === 'barrage') {
+    p.buffs.laser = p.buffs.heavy = p.buffs.homing = p.buffs.mine = p.buffs.barrage = p.buffs.nova = p.buffs.rapid = p.buffs.spread = 0;
+    if (weapon === 'laser' || weapon === 'heavy' || weapon === 'homing' || weapon === 'mine' || weapon === 'barrage' || weapon === 'nova') {
       p.buffs[weapon] = 12;
       p.weapon = 'auto';
     } else if (weapon === 'sniper') {
@@ -2851,7 +2866,7 @@ export class Match {
     const bf = [];
     for (const p of this.list()) {
       if (BUFF_TYPES.some((type) => p.buffs[type] > 0)) {
-        bf.push([p.id, r1(p.buffs.shield), r1(p.buffs.rapid), r1(p.buffs.spread), r1(p.buffs.laser), r1(p.buffs.heavy), r1(p.buffs.homing), r1(p.buffs.mine), r1(p.buffs.barrage), r1(p.buffs.overdrive), r1(p.buffs.magnet), r1(p.buffs.leech), r1(p.buffs.jam)]);
+        bf.push([p.id, r1(p.buffs.shield), r1(p.buffs.rapid), r1(p.buffs.spread), r1(p.buffs.laser), r1(p.buffs.heavy), r1(p.buffs.homing), r1(p.buffs.mine), r1(p.buffs.barrage), r1(p.buffs.overdrive), r1(p.buffs.magnet), r1(p.buffs.leech), r1(p.buffs.jam), r1(p.buffs.nova)]);
       }
     }
 
