@@ -1,0 +1,14 @@
+{
+  "name": "orbit-hill-online-server",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node server/server.js",
+    "start:lan": "ORBIT_HILL_HOST=0.0.0.0 node server/server.js",
+    "test:syntax": "node --check server/server.js && node --check public/js/main.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

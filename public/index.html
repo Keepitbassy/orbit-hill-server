@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#04060d" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>Orbit Hill · Online</title>
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='13' fill='none' stroke='%233ff2ff' stroke-width='2'/></svg>" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="screen" width="1800" height="1200" aria-label="Campo de juego"></canvas>
+
+      <!-- ═══════════════════════ HUD superior ═══════════════════════ -->
+      <header id="hud" class="hidden">
+        <div class="hud-left">
+          <div class="score-chip cyan">
+            <span class="team-name" id="score-cyan-label">CYAN</span>
+            <span class="score-value" id="score-cyan">0</span>
+            <div class="score-bar"><i id="bar-cyan"></i></div>
+          </div>
+          <div class="score-chip coral">
+            <span class="team-name" id="score-coral-label">CORAL</span>
+            <span class="score-value" id="score-coral">0</span>
+            <div class="score-bar"><i id="bar-coral"></i></div>
+          </div>
+        </div>
+
+        <div class="hud-center">
+          <div class="mode-chip" id="mode-chip">REY DE LA COLINA</div>
+          <div class="timer" id="timer">6:00</div>
+          <div class="hill-state" id="hill-state">COLINA LIBRE</div>
+          <div class="wave-info hidden" id="wave-info">OLEADA 1/5 · VIDAS 12</div>
+          <div class="tac-status hidden" id="tac-status"></div>
+          <div class="objective-text" id="objective-text"></div>
+          <div class="pad-prompt hidden" id="pad-prompt"></div>
+          <div class="tac-hint hidden" id="tac-hint"></div>
+        </div>
+
+        <div class="hud-right">
+          <div class="vitals">
+            <div class="vital">
+              <span class="vital-label">VIDA</span>
+              <div class="vital-bar"><i id="hp-bar"></i></div>
+              <span class="vital-num" id="hp-num">100</span>
+            </div>
+            <div class="vital">
+              <span class="vital-label">BOOST</span>
+              <div class="vital-bar boost"><i id="boost-bar"></i></div>
+              <span class="vital-num" id="boost-num">LISTO</span>
+            </div>
+            <div class="vital tac-only hidden" id="dash-vital">
+              <span class="vital-label">ESQUIVA</span>
+              <div class="vital-bar dash"><i id="dash-bar"></i></div>
+              <span class="vital-num" id="dash-num">LISTO</span>
+            </div>
+            <div class="vital tac-only hidden" id="smoke-vital">
+              <span class="vital-label">HUMO</span>
+              <span class="vital-num chip-num" id="smoke-num">0/2</span>
+            </div>
+            <div class="vital tac-only hidden" id="bounce-vital">
+              <span class="vital-label">REBOTE</span>
+              <div class="vital-bar bounce"><i id="bounce-bar"></i></div>
+              <span class="vital-num" id="bounce-num">LISTO</span>
+            </div>
+            <div class="vital tac-only hidden" id="aim-vital">
+              <span class="vital-label">PUNTERÍA</span>
+              <span class="vital-num chip-num" id="aim-num">—</span>
+            </div>
+          </div>
+          <div class="hud-buttons">
+            <span class="map-chip" id="map-chip">CIUDADELA</span>
+            <button id="cam-btn" class="ghost camera-btn" title="Cámara (C)" aria-label="Cambiar cámara">⬚</button>
+            <select id="zoom-select" class="ghost zoom-select" aria-label="Zoom de la cámara de seguimiento"></select>
+            <button id="mute-btn" class="ghost" title="Silenciar (M)">🔊</button>
+            <button id="touch-table" class="ghost touch-only" aria-label="Mostrar tabla">≡</button>
+            <button id="help-btn" class="ghost" title="Instrucciones (H)">?</button>
+          <button id="chaos-armory-top" class="ghost hidden" title="Caos Orbital: siguiente arma de prueba">⚙ ARMAS</button>
+          </div>
+        </div>
+      </header>
+
+      <!-- ═══════════════════════ HUD inferior ═══════════════════════ -->
+      <section id="weapon-strip" class="hidden" aria-label="Armas y equipo táctico">
+        <div class="vital tac-only hidden" id="weapon-vital">
+          <span class="vital-label">ARMA</span>
+          <div class="weapon-seg" id="weapon-seg" role="group" aria-label="Elegir arma (teclas 1 a 4)">
+            <button type="button" data-weapon="auto" aria-pressed="true" title="Cañón automático · munición ilimitada">AUTO<b class="w-ammo">∞</b></button>
+            <button type="button" data-weapon="plasma" aria-pressed="false" title="Escopeta plasma · munición ilimitada">PLASMA<b class="w-ammo">∞</b></button>
+            <button type="button" data-weapon="sniper" aria-pressed="false" disabled title="Rifle de precisión · se recoge en el mapa">SNIPER<b class="w-ammo">0</b></button>
+            <button type="button" data-weapon="boomer" aria-pressed="false" disabled title="Lanzador explosivo · se recoge en el mapa">BOOMER<b class="w-ammo">0</b></button>
+          </div>
+          <button type="button" id="chaos-armory-btn" class="ghost hidden" title="Prueba todas las armas y powerups de Caos Orbital">ARSENAL DE PRUEBA</button>
+        </div>
+      </section>
+
+      <aside id="roster-panel" class="hidden">
+        <h3>JUGADORES <span id="room-code-mini"></span></h3>
+        <div id="ffa-board" class="hidden"></div>
+        <div id="roster-list"></div>
+      </aside>
+
+      <section id="self-panel" class="hidden">
+        <div id="self-name">—</div>
+        <div id="self-team" class="tag">—</div>
+        <div id="self-stats">K 0 · D 0</div>
+        <div id="buff-bar"></div>
+        <div id="net-stats">ping — ms</div>
+        <div id="controller-live">Teclado</div>
+      </section>
+
+      <div id="kill-feed" class="hidden"></div>
+
+      <!-- ═══════════════════════ Chat ═══════════════════════ -->
+      <div id="chat-box" class="hidden">
+        <div id="chat-log"></div>
+        <input id="chat-input" maxlength="120" placeholder="Escribe y pulsa Enter para hablar…" autocomplete="off" />
+      </div>
+
+      <!-- ═══════════════════════ Scoreboard (Tab) ═══════════════════════ -->
+      <div id="scoreboard" class="overlay hidden">
+        <div class="panel wide">
+          <h2>Tabla de posiciones</h2>
+          <p class="dim" id="sb-mode"></p>
+          <div class="teams-grid" id="sb-teams">
+            <div class="team-column cyan"><h3><span id="sb-cyan-label">Cyan</span> <b id="sb-cyan">0</b></h3><div id="sb-cyan-list"></div></div>
+            <div class="team-column coral"><h3><span id="sb-coral-label">Coral</span> <b id="sb-coral">0</b></h3><div id="sb-coral-list"></div></div>
+          </div>
+          <div id="sb-flat" class="flat-list hidden"></div>
+          <p class="dim">Suelta Tab para volver al juego</p><button id="table-close" class="primary">Volver al juego</button>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════ Menú principal ═══════════════════════ -->
+      <div id="menu" class="overlay">
+        <div class="panel logo-panel simple-online">
+          <div class="logo lab">
+            <h1>ORBIT<span>HILL</span></h1>
+            <p class="tagline">Elige nave, comparte una sala y dispara.</p>
+            <p class="lab-badge" id="lab-badge">ONLINE · JUEGA CON AMIGOS</p>
+          </div>
+          <p class="controller-status" role="status">Mando: conecta por USB/Bluetooth y pulsa un botón.</p>
+          <p class="pad-hint" id="menu-pad-hint">Con mando, el gatillo izquierdo apunta y el stick izquierdo desplaza la nave.</p>
+          <div class="gamepad-profile-picker advanced-setting">
+            <span class="mode-picker-title">Perfil de mando</span>
+            <div class="gamepad-profile-options" role="group" aria-label="Perfil de mando"></div>
+            <p class="gamepad-profile-note dim"></p>
+          </div>
+          <p class="lab-note">Ciudadela añade mapas elegibles, cascos de nave, cuatro armas, humo, rebote en cobertura y apuntado con gatillo o botón derecho del ratón.</p>
+
+          <label class="touch-setting"><input type="checkbox" id="touch-toggle" /> Controles táctiles</label>
+          <p class="touch-only mobile-tip">El campo llena la pantalla; la cámara sigue tu nave y el minimapa muestra la arena. Recomendado en horizontal.</p>          <p class="touch-only mobile-tip">Para jugar sin las barras de Safari: Compartir → Añadir a pantalla de inicio → activa «Abrir como app» si aparece. Después abre Orbit Hill desde ese icono.</p>
+          <label class="field">
+            <span>Nombre de piloto</span>
+            <input id="name-input" maxlength="14" value="Piloto" autocomplete="off" />
+          </label>
+
+          <div class="model-picker-block">
+            <span class="mode-picker-title">1. Elige tu nave</span>
+            <div class="model-buttons" id="model-picker" role="group" aria-label="Elegir casco de nave"></div>
+            <p class="mode-note" id="model-note"></p>
+          </div>
+
+          <div class="mode-picker">
+            <span class="mode-picker-title">2. Elige partida</span>
+            <div class="mode-buttons" id="mode-buttons"></div>
+            <p class="mode-note" id="mode-note"></p>
+          </div>
+
+          <div class="room-options advanced-setting">
+            <span class="mode-picker-title">Mapa, tamaño de sala y colina (por defecto: Ciudadela · Ampliado · 45 s)</span>
+            <div class="room-options-row">
+              <label class="field">Mapa
+                <select id="battlefield-select" aria-label="Mapa de combate"></select>
+              </label>
+              <label class="field">Arena
+                <select id="arena-select" aria-label="Tamaño de la sala"></select>
+              </label>
+              <label class="field">Colina cada
+                <select id="hill-seconds-create" aria-label="Cada cuánto se mueve la colina"></select>
+              </label>
+              <label class="field">Stocks
+                <select id="stocks-create" aria-label="Vidas por piloto"><option value="1">1 vida</option><option value="3" selected>3 vidas</option><option value="5">5 vidas</option><option value="7">7 vidas</option></select>
+              </label>
+            </div>
+            <p class="mode-note" id="battlefield-note"></p>
+            <p class="mode-note">El anfitrión puede cambiarlos en la sala, entre partidas.</p>
+          </div>
+
+          <div class="team-picker advanced-setting" id="team-picker">
+            <button class="team-btn cyan" data-team="cyan">
+              <b>Cyan</b><small id="cupo-cyan">cupo 0/4</small>
+            </button>
+            <button class="team-btn coral" data-team="coral">
+              <b>Coral</b><small id="cupo-coral">cupo 0/4</small>
+            </button>
+          </div>
+          <p class="mode-note hidden" id="team-note">Elige equipo solo en modos por equipos; en arcade y todos contra todos se asigna sola.</p>
+
+          <div class="menu-actions">
+            <button id="create-btn" class="primary">Crear y jugar</button>
+            <div class="join-row">
+              <input id="code-input" maxlength="6" placeholder="CÓDIGO" autocomplete="off" />
+              <button id="join-btn">Entrar</button>
+            </div>
+          </div>
+
+          <div id="menu-error" class="error hidden"></div>
+
+          <details class="instructions simple-instructions">
+            <summary>Instrucciones de vuelo</summary>
+            <ul>
+              <li class="touch-guide">Táctil: joystick para girar/acelerar/frenar; DISPARO e IMPULSO a la derecha. Los controles transparentes flotan sobre el campo; la cámara sigue tu nave y el minimapa te orienta.</li>
+              <li><b>W / ↑</b> propulsión · <b>S / ↓</b> frenar (retro)</li>
+              <li><b>A / D</b> o <b>← →</b> rotar la nave</li>
+              <li><b>Espacio</b> disparar (cadencia y balas limitadas)</li>
+              <li><b>Shift</b> boost con cooldown de 5 s</li>
+              <li><b>Tab</b> mantener para la tabla · <b>H</b> ayuda · <b>M</b> silencio · <b>T</b> chat</li>
+              <li class="goal">Domina la <b>colina</b> sin enemigos dentro para sumar. Si hay ambos equipos dentro, está <b>disputada</b> y nadie puntúa. Gana quien llegue a <b>100 puntos</b>.</li>              <li class="goal">Otros modos: <b>Combate por equipos</b> (4 contra 4 a 25 bajas), <b>Todos contra todos</b> (15 bajas por piloto) y <b>Arcade cooperativo</b> (5 oleadas con 12 reapariciones comunes). El anfitrión los cambia en la sala.</li>
+              <li class="goal">Powerups: algunas rocas destruidas a tiros sueltan <b>reparación</b>, <b>escudo</b>, <b>disparo rápido</b> o <b>triple disparo</b>. Recógelos acercándote; caducan a los 18 s.</li>
+              <li class="dim">Los asteroides se fragmentan al destruirlos y hacen daño al chocar. Al reaparecer tienes <b>protección temporal</b>.</li>
+            </ul>
+          </details>
+
+          <details class="instructions lab-block advanced-setting" open>
+            <summary>CIUDADELA: novedades de esta versión (rey de la colina y combate por equipos)</summary>
+            <p class="dim">Los botones de mando descritos aquí corresponden al perfil Ciudadela. Si eliges Assteroids, consulta las asignaciones de tu perfil arriba o en Controles.</p>
+            <ul>
+              <li class="goal"><b>Mapas y cascos</b>: el anfitrión elige <b>mapa</b> al crear la sala; el <b>casco</b> de tu nave se elige en esta misma portada (justo encima) y solo cambia el aspecto.</li>
+              <li class="goal"><b>Cuatro armas</b>: cambia con <b>1</b>, <b>2</b>, <b>3</b> y <b>4</b> o con <b>□/X</b>. El <b>cañón automático</b> y la <b>escopeta plasma</b> (7 perdigones de corto alcance) tienen munición ilimitada; el <b>rifle de precisión</b> (6 balas) y el <b>lanzador explosivo</b> (3 granadas) <b>se recogen en el mapa</b>. El lanzador pega en área y <b>también daña las coberturas</b> (100 por impacto: un bloque aguanta cuatro).</li>
+              <li class="goal"><b>Apuntado</b>: mantén <b>LT/L2</b> en el mando o el <b>botón derecho del ratón</b> para apuntar con la mira; la nave se desplaza en lateral con el stick izquierdo o <b>WASD</b>. Mantén el apuntado 0,35 s para cargar el disparo de precisión.</li>
+              <li class="goal"><b>Humo</b>: <b>G</b> o el botón <b>R3</b> lanza una granada que deja una nube de 6 s: <b>corta la visión</b> (nadie te ve a través de ella, aunque las balas sí la atraviesan). 2 cargas por vida y se reponen <b>en el mapa</b>.</li>
+              <li class="goal"><b>Rebote en cobertura</b>: <b>Alt</b> o el botón <b>A/✕</b> <b>pegado a una cobertura</b> (a menos de un casco de distancia): la nave sale despedida en diagonal. No sirve en el borde del mapa; tiene su propia espera de 0,38 s.</li>
+              <li class="goal"><b>Esquiva lateral</b>: <b>Q</b> y <b>E</b> o el <b>stick derecho</b>. En esta versión de prueba es <b>sin espera (0 s)</b>: cada pulsación reinicia la evasión y mantener Q/E o el stick encadena impulsos de 0,22 s sin espera entre evasiones.</li>
+              <li class="goal"><b>Coberturas</b>: bloques estáticos que <b>bloquean balas y naves</b>. Úsalas para cortar líneas de tiro; puedes destruirlas a tiros.</li>
+              <li class="goal"><b>Derribos y rescates</b>: al quedarte sin vida no mueres: quedas <b>derribado</b> y te arrastras lento. Un compañero mantiene <b>F</b> (o <b>△/Y</b>) a tu lado para reanimarte antes de que se agote el tiempo.</li>
+            </ul>
+            <p class="dim">En <b>arcade</b> y <b>todos contra todos</b> las reglas tácticas permanecen apagadas: el HUD táctico solo aparece en koth y tdm.</p>
+          </details>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════ Sala de espera ═══════════════════════ -->
+      <div id="lobby" class="overlay hidden">
+        <div class="panel wide simple-lobby">
+          <h2>Comparte este código: <span id="lobby-code" class="code">----</span></h2>
+
+          <div class="mode-row">
+            <div class="mode-current">
+              <span class="mode-current-label">MODO</span>
+              <b id="lobby-mode">Rey de la colina</b>
+              <small id="lobby-objective"></small>
+            </div>
+            <div class="mode-buttons" id="lobby-modes"></div>
+          </div>
+
+          <p class="dim" id="lobby-rules"></p>
+          <div class="world-settings-block">
+            <h3>Arena y colina</h3>
+            <div id="lobby-settings"></div>
+          </div>
+
+          <div class="teams-grid" id="lobby-teams-grid">
+            <div class="team-column cyan">
+              <h3>Cyan <small id="lobby-cyan-count"></small></h3>
+              <div id="lobby-cyan-list" class="slot-list"></div>
+            </div>
+            <div class="team-column coral">
+              <h3>Coral <small id="lobby-coral-count"></small></h3>
+              <div id="lobby-coral-list" class="slot-list"></div>
+            </div>
+          </div>
+
+          <div id="lobby-flat" class="slot-list flat-list hidden"></div>
+
+          <div class="lobby-actions">
+            <button id="switch-cyan" class="team-btn cyan small">Pasar a Cyan</button>
+            <button id="switch-coral" class="team-btn coral small">Pasar a Coral</button>
+            <button id="start-btn" class="primary">Iniciar partida</button>
+            <button id="leave-btn" class="ghost">Salir de la sala</button>
+          </div>
+          <div id="lobby-error" class="error hidden"></div>
+          <p class="dim" id="lobby-hint">Solo el anfitrión puede iniciar.</p>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════ Pausa final ═══════════════════════ -->
+      <div id="endgame" class="overlay hidden">
+        <div class="panel wide">
+          <h2 id="end-title">¡Victoria!</h2>
+          <p id="end-sub" class="dim"></p>
+          <p class="dim" id="end-mode"></p>
+          <div class="world-settings-block">
+            <h3>Arena y colina</h3>
+            <div id="end-settings"></div>
+          </div>
+          <div class="teams-grid" id="end-teams">
+            <div class="team-column cyan"><h3>Cyan <b id="end-cyan">0</b></h3><div id="end-cyan-list"></div></div>
+            <div class="team-column coral"><h3>Coral <b id="end-coral">0</b></h3><div id="end-coral-list"></div></div>
+          </div>
+          <div id="end-flat" class="flat-list hidden"></div>
+          <div class="lobby-actions">
+            <button id="rematch-btn" class="primary">Votar revancha</button>
+            <button id="leave-btn-2" class="ghost">Salir de la sala</button>
+          </div>
+          <p class="dim" id="rematch-info">La sala vuelve al lobby al terminar el tiempo de pausa.</p>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════ Ayuda rápida ═══════════════════════ -->
+      <div id="help" class="overlay hidden">
+        <div class="panel">
+          <h2>Controles</h2>
+          <div class="gamepad-profile-picker">
+            <span class="mode-picker-title">Perfil de mando</span>
+            <div class="gamepad-profile-options" role="group" aria-label="Perfil de mando"></div>
+            <p class="gamepad-profile-note dim"></p>
+          </div>
+          <p class="controller-status" role="status">Mando: conecta por USB/Bluetooth y pulsa un botón.</p>
+          <p class="controller-guide">PS5 / Xbox / mandos estándar. Share/View muestra la tabla; Options/Menu abre ayuda o inicia desde la sala. En menús: stick/cruceta y ✕/A para elegir. El código de sala se escribe con teclado. Esquiva, humo, armas especiales y rescate están disponibles en los modos tácticos. X/□ cambia de arma: este juego no tiene recarga manual ni disparo de sniper al soltar RB.</p>
+          <p class="touch-guide">Táctil: mueve el joystick a los lados para girar, arriba para acelerar y abajo para frenar. Mantén DISPARO; pulsa IMPULSO para escapar. Puedes usar varios dedos a la vez. La cámara cercana sigue tu nave; consulta el minimapa para localizar la colina y otros pilotos. La partida sigue mientras consultas la ayuda o la tabla.</p>
+          <p class="touch-guide">Pantalla completa en iPhone: Safari → Compartir → Añadir a pantalla de inicio → «Abrir como app» si aparece. Abre después el icono de Orbit Hill.</p>
+          <ul class="keys">
+            <li><kbd>W</kbd><kbd>↑</kbd> propulsión</li>
+            <li><kbd>S</kbd><kbd>↓</kbd> frenar</li>
+            <li><kbd>A</kbd><kbd>D</kbd><kbd>←</kbd><kbd>→</kbd> rotar</li>
+            <li><kbd>Espacio</kbd> disparar</li>
+            <li><kbd>Shift</kbd> boost</li>
+            <li><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd> elegir arma</li>
+            <li><kbd>Q</kbd><kbd>E</kbd> esquiva lateral</li>
+            <li><kbd>G</kbd> humo</li>
+            <li><kbd>Alt</kbd> rebote pegado a una cobertura</li>
+            <li>Botón derecho del ratón: apuntar</li>
+            <li><kbd>F</kbd> mantener para rescatar</li>
+            <li><kbd>Tab</kbd> scoreboard</li>
+            <li><kbd>T</kbd> chat · <kbd>M</kbd> silencio · <kbd>H</kbd> ayuda</li>
+          </ul>
+          <div class="help-tac" id="help-tac">
+            <h3>MODOS TÁCTICOS (solo rey de la colina y combate por equipos)</h3>
+            <p class="dim"><b>Arma</b> con <kbd>1</kbd>-<kbd>4</kbd> o <b>□/X</b>: <b>cañón automático</b> y <b>escopeta plasma</b> con munición ilimitada; <b>rifle de precisión</b> y <b>lanzador explosivo</b> se recogen en el mapa y el HUD muestra cuánta queda.</p>
+            <p class="dim"><b>Apuntado</b>: reduce la velocidad y carga el disparo de precisión tras 0,35 s. Los controles de mando dependen del perfil elegido arriba. Con ratón, mantén el botón derecho para apuntar y usa WASD para desplazarte.</p>
+            <p class="dim"><b>Humo</b>: dos cargas por vida, nubes de 6 s que cortan la visión. <b>Rebote</b>: requiere estar cerca de una cobertura (espera de 0,38 s). <b>Esquiva</b>: <b>sin espera</b> en esta versión de prueba (0 s; el HUD muestra SIN ESPERA); mantener Q/E o el stick encadena impulsos de 0,22 s. En mando Assteroids, LB propulsa y al soltarlo con dirección esquivas una vez por pulsación. En teclado: G humo, Alt rebote, Q/E esquiva; consulta arriba los botones de tu perfil de mando.</p>
+            <p class="dim"><b>Coberturas</b>: bloques que frenan balas y naves. <b>Derribo</b>: sin vida quedas tendido y lento; un compañero te rescata manteniendo <kbd>F</kbd> o <b>△/Y</b> cerca de ti.</p>
+          </div>
+          <div id="help-mode"></div>
+          <div class="camera-settings">
+            <h3>Cámara (en vivo)</h3>
+            <p class="dim">Independiente del input: teclado, mando y táctil siguen igual. Tecla <kbd>C</kbd> alterna.</p>
+            <div class="camera-modes" id="camera-mode-buttons"></div>
+            <label class="field">Zoom de seguimiento
+              <select id="help-zoom" aria-label="Zoom de la cámara de seguimiento"></select>
+            </label>
+            <p class="dim" id="camera-note"></p>
+          </div>
+          <div class="world-settings-block">
+            <h3>Arena y colina</h3>
+            <div id="help-settings"></div>
+          </div>
+          <p class="dim">Cierra con H, Esc o el botón.</p>
+          <button id="help-close" class="primary">Volver</button>
+        </div>
+      </div>
+
+      <section id="touch-controls" class="hidden" aria-label="Controles de vuelo táctiles">
+        <div class="touch-stick-wrap"><div id="touch-stick" role="group" aria-label="Joystick: lados girar, arriba acelerar, abajo frenar"><span class="stick-up">ACELERAR</span><span class="stick-turn">↶ &nbsp; ↷</span><span id="touch-knob"></span><span class="stick-down">FRENAR</span></div><small>GIRA · ACELERA</small></div>
+        <div class="touch-actions"><button id="touch-brake" aria-label="Frenar">FRENO</button><button id="touch-boost" aria-label="Impulso">IMPULSO</button><button id="touch-fire" aria-label="Disparar">DISPARO</button></div>
+      </section>
+      <div id="toast" class="toast hidden"></div>
+      <div id="connection-banner" class="banner hidden">Conexión perdida. Reconecta para seguir jugando.</div>
+    </div>
+
+    <script src="/config.js"></script>
+    <script type="module" src="/js/main.js?v=online-simple-1"></script>
+  <script>if("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(console.warn);</script>
+</body>
+</html>

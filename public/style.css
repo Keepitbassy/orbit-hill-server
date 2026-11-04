@@ -1,0 +1,878 @@
+/* Orbit Hill — estética arcade vectorial neón.
+   Sin dependencias: solo CSS. */
+
+:root {
+  --bg: #04060d;
+  --bg2: #080d1c;
+  --ink: #d8ecff;
+  --dim: #7f95b8;
+  --cyan: #3ff2ff;
+  --coral: #ff6b5e;
+  --warn: #ffd166;
+  --line: rgba(120, 200, 255, 0.22);
+  --panel: rgba(6, 12, 26, 0.86);
+  --font: "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: radial-gradient(circle at 50% 40%, #0a1730 0%, var(--bg) 62%, #010206 100%);
+  color: var(--ink);
+  font-family: var(--font);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app { position: fixed; inset: 0; }
+
+canvas#screen {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  image-rendering: auto;
+}
+
+.hidden { display: none !important; }
+.controller-status, .controller-guide { color: var(--dim); font-size: 11px; line-height: 1.6; }
+.gamepad-profile-picker { margin: 12px 0; text-align: left; }
+.gamepad-profile-options { display: flex; flex-wrap: wrap; gap: 6px; margin: 7px 0; }
+.gamepad-profile-options button { flex: 1 1 130px; font-size: 11px; padding: 9px 8px; }
+.gamepad-profile-options button.selected { border-color: var(--cyan); color: var(--cyan); background: rgba(20, 64, 78, .7); }
+.gamepad-profile-note { line-height: 1.6; font-size: 11px; letter-spacing: 0; }
+.controller-status { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+#controller-live { margin-top: 5px; color: var(--dim); font-size: 10px; }
+.dim { color: var(--dim); font-size: 12px; line-height: 1.5; }
+.error {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--coral);
+  background: rgba(255, 107, 94, 0.12);
+  color: #ffd9d5;
+  font-size: 12px;
+}
+
+/* ───────────────────────────── HUD ───────────────────────────── */
+#hud {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 14px 18px;
+  pointer-events: none;
+  z-index: 5;
+  text-shadow: 0 0 12px rgba(0, 0, 0, 0.9);
+}
+#hud button { pointer-events: auto; }
+/* El selector de zoom y cualquier control del HUD deben ser clicables: #hud
+   desactiva los eventos y solo los controles los recuperan explícitamente. */
+#hud select, #hud label, #hud a { pointer-events: auto; }
+
+.hud-left, .hud-right, .hud-center { display: flex; gap: 12px; min-width: 0; }
+.hud-center { flex-direction: column; align-items: center; }
+.hud-right { align-items: flex-start; }
+
+.score-chip {
+  min-width: 132px;
+  padding: 6px 10px 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  backdrop-filter: blur(3px);
+}
+.score-chip .team-name { font-size: 10px; letter-spacing: 2.5px; color: var(--dim); }
+.score-chip .score-value {
+  display: block;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+.score-chip.cyan { border-color: rgba(63, 242, 255, 0.5); box-shadow: 0 0 22px rgba(63, 242, 255, 0.16); }
+.score-chip.cyan .score-value { color: var(--cyan); }
+.score-chip.coral { border-color: rgba(255, 107, 94, 0.5); box-shadow: 0 0 22px rgba(255, 107, 94, 0.16); }
+.score-chip.coral .score-value { color: var(--coral); }
+
+.score-bar { height: 4px; margin-top: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.score-bar i { display: block; height: 100%; width: 0%; transition: width 0.2s linear; }
+.cyan .score-bar i { background: var(--cyan); box-shadow: 0 0 10px var(--cyan); }
+.coral .score-bar i { background: var(--coral); box-shadow: 0 0 10px var(--coral); }
+
+.timer {
+  font-size: 30px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 2px;
+  color: var(--ink);
+}
+.hill-state {
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+.hill-state.cyan { color: #052; background: var(--cyan); border-color: var(--cyan); box-shadow: 0 0 18px rgba(63,242,255,0.45); }
+.hill-state.coral { color: #300; background: var(--coral); border-color: var(--coral); box-shadow: 0 0 18px rgba(255,107,94,0.45); }
+.hill-state.contested { color: var(--warn); border-color: var(--warn); animation: pulse 0.9s infinite alternate; }
+@keyframes pulse { from { opacity: 0.55; } to { opacity: 1; } }
+
+.vitals { display: flex; flex-direction: column; gap: 6px; }
+/* ── LAB TÁCTICO: el HUD gana dos vitales (ARMA/ESQUIVA) y en fila ensanchaba
+   la columna derecha hasta pisar el marcador. Bloque 2×2 compacto:
+   VIDA/BOOST arriba, ARMA/ESQUIVA abajo. Nunca envuelve ni desborda. */
+.tac-mode .vitals {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 5px 14px;
+}
+.tac-mode .vital-bar { width: 78px; }
+.tac-mode .vital-num { width: auto; min-width: 40px; white-space: nowrap; }
+.tac-mode .hud-right { flex-wrap: wrap; row-gap: 4px; }
+.vital { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.vital-label { width: 44px; color: var(--dim); letter-spacing: 1.5px; }
+.vital-bar { width: 108px; height: 8px; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; background: rgba(255,255,255,0.05); }
+.vital-bar i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #6ef7a8, #b6ff6e); transition: width 0.15s linear; }
+.vital-bar i.low { background: linear-gradient(90deg, #ffb36e, #ff5e5e); }
+.vital-bar.boost i { background: linear-gradient(90deg, #8f7bff, #3ff2ff); }
+.vital-num { width: 58px; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+.hud-buttons { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; max-width: 100%; }
+
+button {
+  font-family: var(--font);
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: var(--ink);
+  background: rgba(20, 34, 60, 0.9);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: transform 0.08s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+button:hover { background: rgba(38, 62, 100, 0.95); box-shadow: 0 0 16px rgba(63, 242, 255, 0.25); }
+button:active { transform: translateY(1px); }
+button:disabled { opacity: 0.42; cursor: not-allowed; box-shadow: none; }
+button.primary {
+  background: linear-gradient(180deg, rgba(63,242,255,0.24), rgba(63,242,255,0.06));
+  border-color: rgba(63, 242, 255, 0.65);
+  color: #dffcff;
+  font-weight: 700;
+}
+button.ghost { background: rgba(10, 18, 34, 0.75); padding: 8px 10px; }
+
+/* ─────────────────────────── paneles laterales ─────────────────────────── */
+#roster-panel {
+  position: absolute;
+  right: 16px; top: 96px;
+  width: 210px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  z-index: 4;
+  font-size: 12px;
+}
+#roster-panel h3 { margin: 0 0 8px; font-size: 10px; letter-spacing: 2px; color: var(--dim); }
+#room-code-mini { color: var(--cyan); }
+#roster-list { display: flex; flex-direction: column; gap: 5px; }
+.roster-row { display: flex; justify-content: space-between; gap: 6px; align-items: baseline; }
+.roster-row .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roster-row.cyan .nm { color: var(--cyan); }
+.roster-row.coral .nm { color: var(--coral); }
+.roster-row.dead .nm { opacity: 0.4; text-decoration: line-through; }
+.roster-row .kd { color: var(--dim); font-size: 10px; }
+.roster-row .bot-tag { color: var(--warn); font-size: 9px; border: 1px solid rgba(255,209,102,0.5); border-radius: 3px; padding: 0 3px; }
+.roster-row.me .nm { font-weight: 700; text-shadow: 0 0 10px currentColor; }
+
+#self-panel {
+  position: absolute;
+  left: 16px; bottom: 16px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  font-size: 11px;
+  z-index: 4; min-width: 150px;
+}
+#self-name { font-weight: 700; letter-spacing: 1px; }
+#self-team { display: inline-block; margin: 4px 0; padding: 1px 6px; border-radius: 4px; font-size: 10px; letter-spacing: 1.5px; }
+#self-team.cyan { background: rgba(63,242,255,0.16); color: var(--cyan); border: 1px solid rgba(63,242,255,0.5); }
+#self-team.coral { background: rgba(255,107,94,0.16); color: var(--coral); border: 1px solid rgba(255,107,94,0.5); }
+#self-stats, #net-stats { color: var(--dim); font-size: 10px; }
+
+#kill-feed {
+  position: absolute; left: 50%; top: 74px; transform: translateX(-50%);
+  display: flex; flex-direction: column; gap: 4px; align-items: center;
+  font-size: 11px; z-index: 4;
+}
+.feed-item {
+  padding: 3px 10px; border-radius: 999px;
+  background: rgba(4, 10, 22, 0.8); border: 1px solid var(--line);
+  animation: feedIn 0.25s ease;
+}
+@keyframes feedIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; } }
+.feed-item.cyan { border-color: rgba(63,242,255,0.6); color: #cdfaff; }
+.feed-item.coral { border-color: rgba(255,107,94,0.6); color: #ffd8d3; }
+
+/* ─────────────────────────────── chat ─────────────────────────────── */
+#chat-box {
+  position: absolute; left: 16px; top: 96px; width: 280px;
+  display: flex; flex-direction: column; gap: 6px; z-index: 4;
+}
+#chat-log { max-height: 190px; overflow: hidden; display: flex; flex-direction: column; gap: 3px; font-size: 11px; }
+.chat-line { padding: 3px 7px; border-radius: 6px; background: rgba(4, 10, 22, 0.72); border-left: 2px solid var(--line); }
+.chat-line.cyan { border-left-color: var(--cyan); }
+.chat-line.coral { border-left-color: var(--coral); }
+.chat-line .who { color: var(--dim); }
+#chat-input {
+  font-family: var(--font); font-size: 11px; color: var(--ink);
+  background: rgba(4, 10, 22, 0.86); border: 1px solid var(--line);
+  border-radius: 7px; padding: 7px 9px; outline: none;
+}
+#chat-input:focus { border-color: rgba(63,242,255,0.7); box-shadow: 0 0 14px rgba(63,242,255,0.2); }
+
+/* ───────────────────────────── overlays ───────────────────────────── */
+.overlay {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(circle at 50% 50%, rgba(4, 10, 24, 0.72), rgba(1, 3, 8, 0.94));
+  backdrop-filter: blur(4px);
+  z-index: 10;
+  padding: 22px;
+  overflow: auto;
+}
+
+.panel {
+  width: min(520px, 100%);
+  padding: 24px 26px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(9, 17, 34, 0.96), rgba(4, 8, 18, 0.96));
+  box-shadow: 0 0 60px rgba(63, 242, 255, 0.08), inset 0 0 60px rgba(63, 242, 255, 0.03);
+}
+.panel.wide { width: min(760px, 100%); }
+.panel h2 { margin: 0 0 6px; font-size: 17px; letter-spacing: 2px; }
+.panel h3 { margin: 0 0 8px; font-size: 13px; letter-spacing: 1.5px; }
+
+.logo { text-align: center; margin-bottom: 18px; }
+.logo h1 {
+  margin: 0; font-size: clamp(30px, 6vw, 46px); letter-spacing: 6px;
+  color: var(--cyan);
+  text-shadow: 0 0 24px rgba(63, 242, 255, 0.55), 0 0 60px rgba(63, 242, 255, 0.2);
+}
+.logo h1 span { color: var(--coral); text-shadow: 0 0 24px rgba(255, 107, 94, 0.55); }
+.tagline { margin: 4px 0 0; font-size: 11px; color: var(--dim); letter-spacing: 1.6px; }
+
+/* LAB TÁCTICO: identidad distinta de Orbit Hill original. */
+.logo.lab h1 { text-shadow: 0 0 26px rgba(255, 209, 102, 0.35); }
+.logo.lab h1 span { color: #ffd166; text-shadow: 0 0 26px rgba(255, 209, 102, 0.55); }
+.lab-badge {
+  display: inline-block; margin: 10px 0 0; padding: 4px 12px; border-radius: 999px;
+  border: 1px dashed rgba(255, 209, 102, 0.75); color: #ffe6a3;
+  font-size: 11px; letter-spacing: 2.4px; text-transform: uppercase;
+  background: rgba(255, 209, 102, 0.08);
+}
+.lab-note { margin: 6px 0 0; font-size: 10px; color: var(--dim); letter-spacing: 1px; }
+.lab-block { border-left: 2px solid rgba(255, 209, 102, 0.5); padding-left: 10px; }
+.lab-block summary { color: #ffd166; }
+.help-tac { margin-top: 14px; }
+.help-tac h3 { color: #ffd166; font-size: 12px; letter-spacing: 1.8px; margin-bottom: 6px; }
+
+/* ───────── HUD táctico: arma equipada y cooldown de esquiva ───────── */
+.weapon-seg { display: flex; gap: 4px; }
+.weapon-seg button {
+  padding: 3px 8px; font-size: 10px; letter-spacing: 1.2px; border-radius: 6px;
+  background: rgba(10, 18, 34, 0.7); color: var(--dim); min-height: 0;
+}
+.weapon-seg button.selected {
+  color: #041018; background: linear-gradient(180deg, #9ff6ff, #3ff2ff);
+  border-color: var(--cyan); box-shadow: 0 0 14px rgba(63, 242, 255, 0.45);
+}
+.weapon-seg button[data-weapon="plasma"].selected {
+  color: #2a1400; background: linear-gradient(180deg, #ffe6a3, #ffd166);
+  border-color: #ffd166; box-shadow: 0 0 14px rgba(255, 209, 102, 0.5);
+}
+.vital-bar.dash i { background: linear-gradient(90deg, #b18cff, #ff9f43); }
+.tac-status {
+  margin-top: 2px; padding: 3px 12px; border-radius: 999px;
+  border: 1px solid rgba(255, 209, 102, 0.6); background: rgba(24, 12, 4, 0.72);
+  color: #ffe6a3; font-size: 11px; letter-spacing: 1.6px; text-transform: uppercase;
+}
+.tac-status.downed { border-color: rgba(255, 107, 94, 0.8); color: #ffd9d5; background: rgba(48, 10, 8, 0.78); animation: pulse 0.8s infinite alternate; }
+.tac-status.revive { border-color: rgba(110, 247, 168, 0.8); color: #ccffe4; background: rgba(6, 34, 20, 0.78); }
+/* Pista discreta de controles tácticos, bajo el objetivo y sin robar foco. */
+.tac-hint {
+  margin-top: 2px; font-size: 10px; letter-spacing: 1.1px;
+  color: var(--dim); opacity: .72; white-space: nowrap;
+  max-width: min(32vw, 420px); overflow: hidden; text-overflow: ellipsis;
+}
+.touch-mode .tac-hint { display: none; }
+
+/* ─────────── LAB CIUDADELA v0.2: armas, humo, rebote, puntería, mapa ─────────── */
+.weapon-seg button { display: inline-flex; align-items: baseline; gap: 4px; }
+.weapon-seg .w-ammo {
+  font-size: 9px; font-weight: 700; letter-spacing: 0; opacity: .85;
+  font-variant-numeric: tabular-nums;
+}
+.weapon-seg .w-ammo.low { color: #ff8f7f; }
+.weapon-seg button.empty { opacity: .45; }
+.weapon-seg button[data-weapon="sniper"].selected {
+  color: #05210f; background: linear-gradient(180deg, #b6ffb0, #6ef7a8);
+  border-color: #6ef7a8; box-shadow: 0 0 14px rgba(110, 247, 168, 0.45);
+}
+.weapon-seg button[data-weapon="boomer"].selected {
+  color: #2a0d00; background: linear-gradient(180deg, #ffc79a, #ff8f4d);
+  border-color: #ff8f4d; box-shadow: 0 0 14px rgba(255, 143, 77, 0.45);
+}
+
+/* La selección de armas sale de la cabecera a una tira inferior: cuatro armas
+   con munición no caben arriba sin ensanchar el HUD hasta pisar el marcador. */
+#weapon-strip {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: 12px; z-index: 11;
+  display: flex; align-items: center; gap: 10px; max-width: calc(100% - 24px);
+  padding: 6px 12px; border-radius: 999px;
+  border: 1px solid var(--line); background: rgba(6, 14, 28, 0.84);
+}
+#weapon-strip .vital { font-size: 10px; gap: 6px; }
+#weapon-strip .vital-label { width: auto; }
+.touch-mode #weapon-strip { bottom: auto; top: 58px; }
+
+.vital-bar.bounce i { background: linear-gradient(90deg, #ffd166, #ff8f4d); }
+.vital-num.chip-num { width: auto; min-width: 34px; font-size: 11px; letter-spacing: 1px; }
+.vital-num.chip-num.low { color: #ff8f7f; }
+.vital.steady .vital-label, .vital.steady .vital-num { color: #b6ffb0; }
+
+.map-chip {
+  align-self: center; padding: 4px 10px; border-radius: 999px;
+  font-size: 9px; letter-spacing: 1.6px; text-transform: uppercase;
+  border: 1px solid rgba(63, 242, 255, 0.45); color: var(--cyan);
+  background: rgba(6, 22, 38, 0.8);
+}
+
+/* Aviso de arma recogible cercana (se recoge en el mapa). */
+.pad-prompt {
+  margin-top: 2px; padding: 3px 12px; border-radius: 999px;
+  font-size: 10px; letter-spacing: 1.4px; text-transform: uppercase;
+  border: 1px solid rgba(63, 242, 255, 0.6); color: #dffcff; background: rgba(6, 26, 44, 0.78);
+}
+.pad-prompt[data-type="sniper"] { border-color: rgba(110, 247, 168, 0.7); color: #ccffe4; background: rgba(6, 34, 20, 0.8); }
+.pad-prompt[data-type="boomer"] { border-color: rgba(255, 143, 77, 0.75); color: #ffe1cb; background: rgba(40, 16, 4, 0.8); }
+.pad-prompt[data-type="smoke"] { border-color: rgba(200, 210, 225, 0.6); color: #e8ecf5; background: rgba(24, 26, 36, 0.8); }
+
+/* Selector de casco: cosmético, sin estadísticas. */
+.model-picker-block { margin: 10px 0 6px; }
+.model-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+.model-btn {
+  flex: 1 1 150px; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 10px 8px; font-size: 11px; letter-spacing: 1px;
+  background: rgba(10, 20, 38, 0.8); border: 1px solid var(--line);
+}
+.model-btn svg { width: 76px; height: 44px; }
+.model-btn small { font-size: 9px; color: var(--dim); letter-spacing: 0.3px; line-height: 1.3; text-align: center; }
+.model-btn.selected { border-color: var(--cyan); color: var(--cyan); box-shadow: 0 0 18px rgba(63, 242, 255, 0.28); }
+.model-btn.selected small { color: #bfe9f2; }
+
+.pad-hint { font-size: 10px; color: var(--dim); letter-spacing: 0.4px; margin: 2px 0 8px; }
+
+.touch-mode .model-btn { flex: 1 1 100%; }
+
+.field { display: flex; flex-direction: column; gap: 6px; font-size: 11px; color: var(--dim); letter-spacing: 1.4px; }
+input {
+  font-family: var(--font); font-size: 14px; color: var(--ink);
+  background: rgba(4, 10, 22, 0.9); border: 1px solid var(--line);
+  border-radius: 9px; padding: 10px 12px; outline: none; width: 100%;
+}
+input:focus { border-color: rgba(63,242,255,0.7); box-shadow: 0 0 16px rgba(63,242,255,0.18); }
+#code-input { text-transform: uppercase; letter-spacing: 4px; text-align: center; width: 120px; }
+
+.team-picker { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 16px 0; }
+.team-btn {
+  display: flex; flex-direction: column; gap: 3px; align-items: center;
+  padding: 12px; font-size: 13px;
+}
+.team-btn small { font-size: 10px; color: var(--dim); letter-spacing: 1px; }
+.team-btn.cyan { border-color: rgba(63,242,255,0.45); color: var(--cyan); }
+.team-btn.coral { border-color: rgba(255,107,94,0.45); color: var(--coral); }
+.team-btn.selected.cyan { background: rgba(63,242,255,0.16); box-shadow: 0 0 22px rgba(63,242,255,0.28); }
+.team-btn.selected.coral { background: rgba(255,107,94,0.16); box-shadow: 0 0 22px rgba(255,107,94,0.28); }
+.team-btn.small { padding: 8px 12px; font-size: 11px; }
+
+.menu-actions { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+.join-row { display: flex; gap: 8px; }
+.join-row button { flex: 1; }
+
+.instructions { margin-top: 6px; font-size: 11px; }
+.instructions summary { cursor: pointer; color: var(--cyan); letter-spacing: 1.4px; margin-bottom: 8px; }
+.instructions ul { margin: 0; padding-left: 16px; line-height: 1.85; color: var(--dim); }
+.instructions b { color: var(--ink); }
+.instructions .goal { color: #cdfaff; margin-top: 6px; }
+
+.teams-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 14px 0; }
+.team-column {
+  border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px;
+  background: rgba(4, 10, 22, 0.6); min-height: 130px;
+}
+.team-column.cyan { border-color: rgba(63,242,255,0.35); }
+.team-column.coral { border-color: rgba(255,107,94,0.35); }
+.team-column h3 { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; }
+.team-column.cyan h3 { color: var(--cyan); }
+.team-column.coral h3 { color: var(--coral); }
+.team-column small { color: var(--dim); font-size: 10px; letter-spacing: 1px; }
+.team-column b { font-size: 16px; font-variant-numeric: tabular-nums; }
+
+.slot-list { display: flex; flex-direction: column; gap: 6px; }
+.slot {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+  padding: 6px 9px; border-radius: 8px; font-size: 12px;
+  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+}
+.slot.empty { color: var(--dim); font-style: italic; border-style: dashed; }
+.slot .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slot .tags { display: flex; gap: 4px; align-items: center; }
+.tag-pill { font-size: 9px; padding: 1px 5px; border-radius: 999px; border: 1px solid var(--line); color: var(--dim); letter-spacing: 1px; }
+.tag-pill.host { color: var(--warn); border-color: rgba(255,209,102,0.6); }
+.tag-pill.bot { color: var(--warn); border-color: rgba(255,209,102,0.4); }
+.tag-pill.me { color: var(--cyan); border-color: rgba(63,242,255,0.6); }
+
+.lobby-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 6px; }
+.code {
+  color: var(--cyan); font-size: 26px; letter-spacing: 8px;
+  padding: 2px 8px; border-radius: 8px;
+  text-shadow: 0 0 18px rgba(63,242,255,0.6);
+}
+
+#scoreboard .teams-grid { margin-top: 10px; }
+.sb-row { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; border-bottom: 1px dashed rgba(255,255,255,0.06); }
+.sb-row.me { color: var(--cyan); font-weight: 700; }
+.sb-row .kd { color: var(--dim); font-size: 11px; }
+
+.keys { display: grid; grid-template-columns: 1fr; gap: 6px; padding-left: 0; list-style: none; font-size: 12px; color: var(--dim); }
+kbd {
+  display: inline-block; min-width: 22px; text-align: center;
+  padding: 2px 6px; margin-right: 4px;
+  border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px;
+  background: rgba(255,255,255,0.05); color: var(--ink); font-size: 11px;
+}
+
+.toast {
+  position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%);
+  padding: 10px 18px; border-radius: 10px; font-size: 12px;
+  background: rgba(6, 14, 28, 0.95); border: 1px solid var(--line); color: var(--ink);
+  z-index: 20; box-shadow: 0 0 30px rgba(63,242,255,0.15);
+}
+.banner {
+  position: absolute; top: 0; left: 0; right: 0; padding: 8px;
+  text-align: center; font-size: 12px; z-index: 30;
+  background: rgba(255, 107, 94, 0.9); color: #280805; letter-spacing: 1.5px;
+}
+
+@media (max-width: 1100px) and (pointer: fine) {
+  /* Escritorio medio (ventanas de ~800-1100 px): el HUD pasa a 2 filas para
+     que el centro no se aplaste y los botones nunca salgan del viewport.
+     Solo puntero fino: el móvil táctil conserva su pantalla completa. */
+  #hud {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'left right' 'center center';
+    gap: 6px 12px;
+    padding: 10px 12px;
+  }
+  .hud-left { grid-area: left; gap: 8px; }
+  .hud-center {
+    grid-area: center; flex-direction: row; flex-wrap: wrap; align-items: center;
+    justify-content: flex-start; gap: 8px;
+  }
+  .hud-right { grid-area: right; align-items: flex-start; justify-content: flex-end; gap: 10px; }
+  .score-chip { min-width: 76px; padding: 4px 8px 6px; }
+  .score-chip .score-value { font-size: 21px; }
+  .hud-left .score-chip .team-name { max-width: 84px; font-size: 9px; letter-spacing: 1.4px; }
+  .score-bar { margin-top: 4px; }
+  .timer { font-size: 22px; letter-spacing: 1px; }
+  .mode-chip, .objective-text { display: none; }
+  .hill-state { font-size: 9px; letter-spacing: 1px; padding: 3px 8px; }
+  .wave-info { font-size: 9px; letter-spacing: 1px; padding: 3px 8px; }
+  .vitals { flex-direction: row; gap: 10px; }
+  .vital { gap: 5px; font-size: 10px; }
+  .vital-label { width: auto; letter-spacing: 0.6px; }
+  .vital-bar { width: 66px; }
+  .vital-num { width: 36px; font-size: 10px; }
+  .hud-buttons { gap: 5px; }
+  .hud-buttons button { width: 38px; height: 38px; min-height: 38px; padding: 4px; }
+  .hud-buttons .zoom-select { max-width: 104px; font-size: 10px; padding: 4px 6px; }
+  /* HUD táctico: mismo bloque 2×2 aún más ajustado para que a ~815 px el
+     marcador y los vitales compartan fila sin solaparse. */
+  .tac-mode .vitals { gap: 3px 10px; }
+  .tac-mode .vital-bar { width: 58px; }
+  .tac-mode .vital-num { min-width: 30px; font-size: 10px; }
+  .tac-mode .weapon-seg button { padding: 2px 6px; font-size: 9px; letter-spacing: .6px; }
+  /* Paneles laterales justo debajo del HUD de 2 filas. */
+  #roster-panel { top: 112px; width: 196px; }
+  #chat-box { top: 112px; }
+  #kill-feed { top: 108px; }
+}
+
+@media (max-width: 720px) {
+  .teams-grid { grid-template-columns: 1fr; }
+  #roster-panel, #chat-box { display: none; }
+  #hud { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 10px; }
+  .hud-left { gap: 8px; }
+  .score-chip { min-width: 64px; padding: 5px 8px; }
+  .score-chip .score-value { font-size: 22px; }
+  .hud-center { gap: 4px; align-items: flex-end; }
+  .timer { font-size: 22px; }
+  .hill-state { font-size: 8px; letter-spacing: 1px; padding: 3px 6px; }
+  .hud-right { grid-column: 1 / -1; justify-content: space-between; }
+  .vital-bar { width: 80px; }
+  .vitals { flex-direction: row; gap: 10px; }
+  .vital { gap: 4px; font-size: 9px; }
+  .vital-label { width: auto; letter-spacing: 0; }
+  .vital-num { width: 32px; }
+  #self-panel { left: 10px; bottom: 10px; }
+  .panel { max-height: calc(100dvh - 20px); overflow-y: auto; }
+}
+
+/* ═════════════════════ modos, oleadas y powerups ═════════════════════ */
+.mode-btn {
+  display: flex; flex-direction: column; gap: 2px; text-align: left;
+  padding: 8px 10px; border-radius: 9px; cursor: pointer;
+  background: rgba(10, 20, 38, 0.85); border: 1px solid var(--line); color: var(--ink);
+  font: inherit; transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s;
+}
+.mode-btn b { font-size: 12px; letter-spacing: 0.6px; }
+.mode-btn small { font-size: 9px; color: var(--dim); line-height: 1.25; }
+.mode-btn:hover:not(:disabled) { border-color: rgba(63, 242, 255, 0.55); transform: translateY(-1px); }
+.mode-btn.selected {
+  border-color: var(--cyan); box-shadow: 0 0 16px rgba(63, 242, 255, 0.28);
+  background: rgba(16, 40, 64, 0.95);
+}
+.mode-btn.selected b { color: var(--cyan); }
+.mode-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.mode-buttons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 8px 0; }
+.mode-note { font-size: 10px; color: var(--dim); margin: 4px 0 8px; letter-spacing: 0.4px; }
+
+/* ─────────────── opciones de sala (arena + ajuste de colina) ─────────────── */
+.room-options { margin: 10px 0 4px; }
+.room-options-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+select {
+  font-family: var(--font); font-size: 12px; color: var(--ink);
+  background: rgba(10, 20, 38, 0.92); border: 1px solid var(--line);
+  border-radius: 9px; padding: 9px 10px; width: 100%; outline: none; cursor: pointer;
+}
+select:focus { border-color: rgba(63, 242, 255, 0.7); box-shadow: 0 0 14px rgba(63, 242, 255, 0.18); }
+select:disabled { opacity: 0.5; cursor: not-allowed; }
+.field select { margin-top: 4px; }
+
+.world-settings-block { margin: 10px 0; }
+.world-settings {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px;
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px;
+  background: rgba(4, 10, 22, 0.55);
+}
+.ws-field { display: flex; flex-direction: column; gap: 3px; font-size: 9px; letter-spacing: 1.2px; color: var(--dim); }
+.ws-field select { min-width: 132px; padding: 7px 9px; font-size: 11px; }
+.ws-note { flex: 1 1 100%; font-size: 10px; color: var(--dim); letter-spacing: 0.3px; }
+
+/* ───────────────────────────── controles de cámara ───────────────────────── */
+.camera-btn { font-size: 15px; line-height: 1; }
+.camera-btn.follow { border-color: rgba(63, 242, 255, 0.7); color: var(--cyan); box-shadow: 0 0 14px rgba(63, 242, 255, 0.25); }
+.zoom-select { font-size: 11px; padding: 6px 8px; width: auto; }
+.camera-settings { margin: 12px 0; }
+.camera-modes { display: flex; gap: 8px; margin: 6px 0 10px; flex-wrap: wrap; }
+.camera-modes button {
+  flex: 1 1 auto; min-height: 40px; font-size: 12px;
+  background: rgba(10, 20, 38, 0.85); border: 1px solid var(--line);
+}
+.camera-modes button.selected { border-color: var(--cyan); color: var(--cyan); box-shadow: 0 0 16px rgba(63, 242, 255, 0.25); }
+
+/* El minimapa del seguimiento va abajo a la derecha en escritorio: el panel de
+   jugadores se colapsa (la tabla con Tab conserva toda la información). */
+html.cam-follow:not(.touch-mode) #roster-panel,
+html.cam-follow:not(.touch-mode) #chat-box { display: none; }
+.hill-state.warning { color: var(--warn); border-color: rgba(255, 209, 102, 0.7); animation: pulse 0.9s infinite alternate; }
+
+.mode-chip {
+  font-size: 9px; letter-spacing: 2px; padding: 3px 9px; border-radius: 999px;
+  border: 1px solid rgba(63, 242, 255, 0.5); color: var(--cyan);
+  background: rgba(6, 22, 38, 0.8);
+}
+.objective-text {
+  font-size: 9px; letter-spacing: 0.6px; color: var(--dim); max-width: 260px;
+  text-align: center; line-height: 1.3;
+}
+.wave-info {
+  font-size: 10px; letter-spacing: 1.4px; padding: 3px 9px; border-radius: 999px;
+  border: 1px solid rgba(110, 247, 168, 0.55); color: #6ef7a8;
+  background: rgba(6, 30, 20, 0.7);
+}
+
+#buff-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.buff-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; letter-spacing: 0.8px; padding: 2px 8px; border-radius: 999px;
+  border: 1px solid var(--buff, var(--cyan));
+  color: var(--buff, var(--cyan));
+  background: color-mix(in srgb, var(--buff, #3ff2ff) 14%, transparent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--buff, #3ff2ff) 26%, transparent);
+}
+.buff-chip b { font-size: 12px; line-height: 1; }
+
+#ffa-board {
+  position: absolute; top: 92px; right: 12px; z-index: 12;
+  min-width: 168px; padding: 8px 10px; border-radius: 10px;
+  background: rgba(6, 14, 28, 0.86); border: 1px solid var(--line);
+  font-size: 11px; letter-spacing: 0.4px;
+}
+#ffa-board .ffa-row { display: flex; justify-content: space-between; gap: 10px; padding: 2px 0; }
+#ffa-board .ffa-row.me { color: #fff; font-weight: 700; }
+#ffa-board .ffa-row .dot {
+  display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  margin-right: 6px; vertical-align: middle; background: currentColor;
+}
+
+.flat-list { display: flex; flex-direction: column; gap: 4px; }
+.flat-row {
+  display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center;
+  padding: 5px 9px; border-radius: 8px; font-size: 11px;
+  background: rgba(10, 20, 38, 0.7); border: 1px solid var(--line);
+}
+.flat-row .who { display: flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; }
+.flat-row.me { border-color: rgba(255, 255, 255, 0.5); }
+.flat-row .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
+.flat-row .stats { color: var(--dim); font-size: 10px; letter-spacing: 0.6px; }
+
+#help-mode h3 { margin: 10px 0 6px; font-size: 12px; letter-spacing: 1.4px; color: var(--cyan); }
+#help-mode .keys li.goal { color: var(--cyan); border-color: rgba(63, 242, 255, 0.5); }
+
+@media (max-width: 720px) {
+  .mode-buttons { grid-template-columns: 1fr; }
+  #ffa-board { display: none !important; }
+  .objective-text { display: none; }
+}
+
+/* Etiquetas del marcador y rol sin equipos (arcade/ffa) */
+.score-chip .team-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 124px; }
+.tag.flat { color: var(--dim); border-color: var(--line); background: rgba(10, 20, 38, 0.7); }
+.wave-info.danger { color: #ff6b5e; border-color: rgba(255, 107, 94, 0.6); animation: pulse 0.9s infinite alternate; }
+
+/* iPhone: el campo ocupa toda la pantalla; HUD y controles flotan encima. */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+}
+#app { height: 100%; height: 100dvh; height: var(--view-height, 100dvh); }
+.touch-only, .touch-guide { display: none; }
+.touch-mode .touch-only, .touch-mode .touch-guide { display: block; }
+.touch-setting { display: flex; align-items: center; gap: 10px; margin: 12px 0; font-size: 13px; color: var(--dim); cursor: pointer; }
+.touch-setting input { width: 22px; height: 22px; accent-color: var(--cyan); }
+.mobile-tip, .touch-guide { font-size: 12px; color: var(--cyan); line-height: 1.6; }
+.touch-mode .overlay { padding: calc(10px + var(--safe-top)) calc(12px + var(--safe-right)) calc(10px + var(--safe-bottom)) calc(12px + var(--safe-left)); }
+.panel { max-height: 100%; overflow-y: auto; }
+.touch-mode .panel { max-height: 100%; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 20px; width: 100%; }
+.touch-mode .logo h1 { font-size: clamp(27px, 7vw, 44px); letter-spacing: 5px; }
+.touch-mode input:not([type=checkbox]) { font-size: 16px; min-height: 46px; }
+/* 16 px en selectores táctiles: evita el auto-zoom de Safari al enfocarlos */
+.touch-mode select { font-size: 16px; }
+.touch-mode button, .touch-mode summary { min-height: 44px; }
+.touch-mode .mode-btn small { font-size: 11px; line-height: 1.4; }
+.touch-mode .mode-btn b { font-size: 13px; }
+.touch-mode .mode-note, .touch-mode .instructions { font-size: 12px; line-height: 1.5; }
+.touch-mode .controller-status { font-size: 11px; }
+.touch-mode #roster-panel, .touch-mode #chat-box, .touch-mode #net-stats,
+.touch-mode #controller-live, .touch-mode #kill-feed { display: none; }
+
+/* No se descuenta espacio para controles, barras o zonas seguras del canvas. */
+.touch-mode.in-game canvas#screen {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+.touch-mode #hud {
+  top: var(--safe-top); left: var(--safe-left); right: var(--safe-right);
+  display: flex; align-items: flex-start; gap: 8px; padding: 6px 10px;
+}
+.touch-mode .hud-left { gap: 4px; }
+.touch-mode .score-chip {
+  min-width: 45px; max-width: 75px; padding: 3px 5px; border-radius: 6px;
+  background: rgba(4, 10, 22, .16); box-shadow: none; backdrop-filter: none;
+}
+.touch-mode .score-chip .team-name { display: block; max-width: 65px; font-size: 8px; letter-spacing: .5px; }
+.touch-mode .score-chip .score-value { font-size: 19px; }
+.touch-mode .score-bar { height: 2px; margin-top: 3px; }
+.touch-mode .hud-center { gap: 2px; flex-direction: column; }
+.touch-mode #hud .objective-text { display: none; }
+.touch-mode .mode-chip, .touch-mode .wave-info {
+  max-width: 180px; font-size: 8px; letter-spacing: .3px; padding: 2px 5px;
+  background: rgba(4, 10, 22, .18);
+}
+.touch-mode .timer { font-size: 21px; line-height: 1.1; letter-spacing: 1px; }
+.touch-mode .hill-state { font-size: 8px; letter-spacing: .5px; padding: 2px 5px; background: rgba(4, 10, 22, .18); }
+.touch-mode .hill-state.cyan { color: var(--cyan); background: rgba(63,242,255,.12); box-shadow: none; }
+.touch-mode .hill-state.coral { color: var(--coral); background: rgba(255,107,94,.12); box-shadow: none; }
+.touch-mode .hud-right { gap: 6px; align-items: flex-start; }
+.touch-mode .vitals { flex-direction: column; gap: 4px; padding-top: 3px; }
+.touch-mode .vital { gap: 4px; font-size: 9px; }
+.touch-mode .vital-label { width: auto; font-size: 8px; letter-spacing: .2px; }
+.touch-mode .vital-bar { width: 46px; height: 5px; }
+.touch-mode .vital-num { width: 28px; font-size: 8px; }
+/* El HUD táctico no debe inflar el HUD móvil (los botones de arma son de 44px
+   por defecto en touch-mode; aquí se mantienen compactos y translúcidos). */
+.touch-mode .weapon-seg button {
+  min-height: 0; height: auto; padding: 1px 4px; font-size: 8px;
+  letter-spacing: .3px; background: rgba(4,10,22,.2);
+}
+.touch-mode .tac-status { font-size: 9px; padding: 2px 8px; letter-spacing: .8px; }
+.touch-mode .hud-buttons { gap: 2px; }
+.touch-mode .hud-buttons button {
+  width: 44px; height: 44px; padding: 4px; min-height: 44px;
+  background: rgba(4,10,22,.16); border-color: rgba(120,200,255,.18);
+}
+/* El selector de zoom también es táctil y grande en móvil. */
+.touch-mode .zoom-select {
+  width: auto; min-width: 92px; height: 44px; min-height: 44px;
+  padding: 4px 6px; font-size: 16px;
+  background: rgba(4,10,22,.16); border-color: rgba(120,200,255,.18);
+}
+.touch-mode .world-settings { gap: 8px; }
+.touch-mode .ws-field { font-size: 10px; }
+.touch-mode .ws-field select { min-width: 0; width: 100%; font-size: 16px; min-height: 46px; }
+.touch-mode .camera-modes button { min-height: 46px; }
+/* La identidad ya aparece sobre la nave: aquí solo quedan los powerups. */
+.touch-mode #self-panel {
+  left: 50%; bottom: calc(10px + var(--safe-bottom)); transform: translateX(-50%);
+  padding: 0; min-width: 0; max-width: 34%; border: 0; background: none;
+  pointer-events: none; text-align: center;
+}
+.touch-mode #self-name, .touch-mode #self-team, .touch-mode #self-stats { display: none; }
+.touch-mode #buff-bar { justify-content: center; gap: 3px; margin: 0; }
+.touch-mode .buff-chip { padding: 2px 4px; font-size: 8px; box-shadow: none; background: rgba(4,10,22,.2); }
+.touch-mode .toast {
+  top: calc(82px + var(--safe-top)); bottom: auto; max-width: 66%; width: max-content;
+  padding: 5px 9px; font-size: 10px; text-align: center; pointer-events: none;
+  border: 0; background: rgba(4,10,22,.25); box-shadow: none; text-shadow: 0 1px 4px #000;
+}
+#touch-controls {
+  position: absolute; z-index: 7;
+  left: calc(14px + var(--safe-left)); right: calc(14px + var(--safe-right));
+  bottom: calc(12px + var(--safe-bottom)); height: 150px;
+  display: flex; justify-content: space-between; align-items: flex-end;
+  pointer-events: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+}
+#touch-controls [aria-disabled=true] { opacity: .25; }
+.touch-stick-wrap { text-align: center; color: #c0e5ec; font-size: 10px; }
+.touch-stick-wrap > small { display: none; }
+#touch-stick {
+  position: relative; width: 128px; height: 128px; border-radius: 50%;
+  border: 1px solid rgba(63,242,255,.7); background: rgba(63,242,255,.08);
+  opacity: .55; transition: opacity .12s ease;
+  pointer-events: auto; touch-action: none;
+}
+#touch-knob {
+  position: absolute; left: calc(50% - 23px); top: calc(50% - 23px);
+  width: 46px; height: 46px; border: 2px solid var(--cyan);
+  background: rgba(63,242,255,.12); border-radius: 50%; pointer-events: none;
+}
+.stick-up, .stick-down, .stick-turn { position: absolute; left: 0; right: 0; font-size: 8px; pointer-events: none; }
+.stick-up { top: 12px; }
+.stick-down { bottom: 12px; }
+.stick-turn { top: 54px; font-size: 16px; letter-spacing: 36px; padding-left: 36px; }
+.touch-actions { display: grid; grid-template-columns: 62px 86px; gap: 8px; align-items: end; }
+.touch-actions button {
+  touch-action: none; pointer-events: auto; border-radius: 50%; padding: 0;
+  font-size: 9px; letter-spacing: .3px; height: 62px; min-width: 0;
+  background: rgba(160,190,230,.08); opacity: .55; box-shadow: none;
+  transition: opacity .12s ease, background .12s ease;
+}
+#touch-fire { grid-column: 2; grid-row: 1 / 3; height: 86px; width: 86px; align-self: center; border-color: var(--coral); color: #ffb3ab; background: rgba(255,107,94,.10); }
+#touch-boost { grid-column: 1; grid-row: 1; border-color: var(--cyan); color: var(--cyan); background: rgba(63,242,255,.08); }
+#touch-brake { grid-column: 1; grid-row: 2; }
+#touch-stick.is-active, .touch-actions button.is-active, .touch-actions button:active { opacity: .9; background: rgba(63,242,255,.16); box-shadow: none; }
+
+@media (orientation: portrait) {
+  .touch-mode .mode-buttons { grid-template-columns: 1fr; }
+  .touch-mode #hud { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "left center" "right right"; gap: 4px 8px; }
+  .touch-mode .hud-left { grid-area: left; }
+  .touch-mode .hud-right { grid-area: right; }
+  .touch-mode .hud-center { grid-area: center; }
+  /* El zoom sigue disponible en Ayuda; el HUD conserva los cuatro botones. */
+  .touch-mode #zoom-select { display: none; }
+  .touch-mode .hud-right { grid-column: 1 / -1; justify-content: space-between; align-items: center; }
+  .touch-mode .hud-center { align-items: flex-end; }
+  .touch-mode .vitals { padding-top: 0; gap: 3px; }
+  .touch-mode .vital-bar { width: 54px; }
+  .touch-mode .toast { top: calc(110px + var(--safe-top)); }
+}
+@media (orientation: landscape) {
+  .touch-mode .teams-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-height: 390px) and (orientation: landscape) {
+  #touch-stick { width: 116px; height: 116px; }
+  .stick-turn { top: 48px; }
+  .touch-actions { grid-template-columns: 56px 78px; gap: 6px; }
+  .touch-actions button { height: 56px; }
+  #touch-fire { width: 78px; height: 78px; }
+  .touch-mode .mode-chip { display: none; }
+}
+
+/* El combate táctico mantiene el centro despejado incluso con rescates. */
+@media (pointer: fine) {
+  .tac-mode .hud-center { gap: 4px; }
+  .tac-mode #hud .objective-text, .tac-mode #hud .mode-chip { display: none; }
+}
+
+/* Ventanas estrechas de escritorio (p. ej. panel lateral de la app). Las
+   áreas explícitas evitan heredar la fila de vitales sobre los marcadores. */
+@media (max-width: 720px) and (pointer: fine) {
+  html:not(.touch-mode).tac-mode #hud {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas: "left center" "right right";
+    gap: 6px 10px;
+  }
+  html:not(.touch-mode).tac-mode .hud-left { grid-area: left; }
+  html:not(.touch-mode).tac-mode .hud-center {
+    grid-area: center; flex-direction: column; align-items: flex-end; gap: 3px;
+  }
+  html:not(.touch-mode).tac-mode .hud-right {
+    grid-area: right; grid-column: 1 / -1;
+    justify-content: space-between; align-items: center;
+  }
+  html:not(.touch-mode).tac-mode .vitals { gap: 3px 8px; }
+  html:not(.touch-mode).tac-mode .vital { gap: 4px; font-size: 9px; }
+  html:not(.touch-mode).tac-mode .vital-label { letter-spacing: .3px; }
+  html:not(.touch-mode).tac-mode .vital-bar { width: 46px; }
+  html:not(.touch-mode).tac-mode #tac-hint { display: none; }
+}
+
+/* Los avisos dejan libre la tira de armas durante el combate táctico. */
+html.tac-mode:not(.touch-mode) .toast { bottom: 64px; }
+
+/* Phone-first online home. Advanced room tuning is deliberately kept out of
+   the first screen; the game still retains its essential in-match controls. */
+.simple-online .advanced-setting,
+.simple-lobby .lobby-modes,
+.simple-lobby .world-settings-block,
+.simple-lobby #start-btn { display: none; }
+.simple-online .simple-instructions { margin-top: 14px; }
+.simple-online .menu-actions { margin-top: 18px; }
+.simple-online .model-buttons { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 650px) {
+  .simple-online .panel, .simple-online { max-width: min(94vw, 620px); }
+  .simple-online .model-buttons { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .simple-online .model-btn small { display: none; }
+  .simple-lobby h2 { font-size: 20px; }
+}
