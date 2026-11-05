@@ -162,9 +162,9 @@ export function createGameServer(options = {}) {
       }
       settings.hillSeconds = hillSeconds;
     }
-    // Campo de batalla opcional (Ciudadela por defecto en las salas nuevas).
+    // Caos Orbital arranca abierto; los demás modos conservan Ciudadela.
     // Viaja APARTE de `settings` para no alterar el contrato existente.
-    settings.battlefield = BATTLEFIELD_DEFAULT;
+    settings.battlefield = mode === 'chaos' ? 'orbit' : BATTLEFIELD_DEFAULT;
     const teamCyan = Number(msg.teamCyan ?? 4);
     const teamCoral = Number(msg.teamCoral ?? 4);
     if (!Number.isInteger(teamCyan) || !Number.isInteger(teamCoral) || teamCyan < 1 || teamCyan > TEAM_SIZE || teamCoral < 1 || teamCoral > TEAM_SIZE) {

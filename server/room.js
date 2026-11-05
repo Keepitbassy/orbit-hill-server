@@ -482,6 +482,18 @@ export class Room {
         }
         return;
       }
+      case 'end_game': {
+        if (client.playerId !== this.hostId) {
+          client.send({ t: 'error', code: 'no_eres_host', message: 'Solo el anfitrión puede terminar la partida.' });
+          return;
+        }
+        if (this.match.phase !== 'playing' && this.match.phase !== 'countdown') {
+          client.send({ t: 'error', code: 'no_en_partida', message: 'No hay una partida en curso.' });
+          return;
+        }
+        this.match.endMatch('draw', 'host');
+        return;
+      }
       case 'rematch': {
         const force = client.playerId === this.hostId && msg.force === true;
         this.voteRematch(client, force);
