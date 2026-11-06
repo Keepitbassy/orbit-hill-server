@@ -202,13 +202,14 @@
           <p class="mode-note hidden" id="team-note">Elige equipo solo en modos por equipos; en arcade y todos contra todos se asigna sola.</p>
 
           <div class="menu-actions">
-            <button id="create-btn" class="primary">Crear y jugar</button>
+            <button id="create-btn" class="primary">Crear sala</button>
             <div class="join-row">
               <input id="code-input" maxlength="6" placeholder="CÓDIGO" autocomplete="off" />
               <button id="join-btn">Entrar</button>
             </div>
           </div>
 
+          <p class="dim">Crea una sala, comparte el código y espera a tus amigos antes de iniciar la partida.</p>
           <div id="menu-error" class="error hidden"></div>
 
           <details class="instructions simple-instructions">
@@ -375,7 +376,7 @@
     </div>
 
     <script src="/config.js"></script>
-    <script type="module" src="/js/main.js?v=online-simple-1"></script>
+    <script type="module" src="/js/main.js?v=online-rooms-2"></script>
   <script>if("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(console.warn);</script>
 </body>
 </html>
