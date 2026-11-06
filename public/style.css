@@ -865,8 +865,7 @@ html.tac-mode:not(.touch-mode) .toast { bottom: 64px; }
    the first screen; the game still retains its essential in-match controls. */
 .simple-online .advanced-setting,
 .simple-lobby .lobby-modes,
-.simple-lobby .world-settings-block,
-.simple-lobby #start-btn { display: none; }
+.simple-lobby .world-settings-block { display: none; }
 .simple-online .simple-instructions { margin-top: 14px; }
 .simple-online .menu-actions { margin-top: 18px; }
 .simple-online .model-buttons { grid-template-columns: repeat(2, minmax(0, 1fr)); }
