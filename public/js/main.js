@@ -155,6 +155,8 @@ const el = {
   weaponSeg: $('weapon-seg'),
   chaosArmoryBtn: $('chaos-armory-btn'),
   chaosArmoryTop: $('chaos-armory-top'),
+  endGameBtn: $('end-game-btn'),
+  endGameHelpBtn: $('end-game-help-btn'),
   dashVital: $('dash-vital'),
   dashBar: $('dash-bar'),
   dashNum: $('dash-num'),
@@ -683,6 +685,7 @@ const state = {
   selfDowned: false,        // mi nave está derribada ahora mismo
   selfTac: null,            // fila táctica propia (armas, munición, rebote, humo)
   tacticalUiOn: null,       // última visibilidad tácita aplicada al DOM
+  tacticalUiMode: null,
   padActive: false,         // hay un mando estándar en uso (para la pista)
 };
 
@@ -910,6 +913,10 @@ function renderModeButtons(container, current, onPick, disabled = false) {
 function renderMenuModeUI() {
   renderModeButtons(el.modeButtons, state.createMode, (mode) => {
     state.createMode = mode;
+    if (mode === 'chaos') {
+      state.battlefieldChoice = 'orbit';
+      saveBattlefieldChoice(state.battlefieldChoice);
+    }
     sfx.ui();
     renderMenuModeUI();
   });
@@ -1829,7 +1836,7 @@ function currentInput() {
  * presupuesto de 60 mensajes/s. La mira local no espera a nadie.
  */
 function sendInput(now, input) {
-  const wire = { ...input, weapon: state.tactical ? state.weapon : 'auto', model: state.model };
+  const wire = { ...input, weapon: state.tactical && state.mode === 'koth' ? state.weapon : 'auto', model: state.model };
   state.intent = wire;
   const digest = intentDigest(wire);
   const actionDigest = intentDigest(wire, ACTION_FIELDS) + `|dashId:${wire.dashId ?? ''}`;
@@ -1886,16 +1893,21 @@ function updateController(now) {
   if (overlay) {
     controller.suppressGameplay();
     // En menús ✕/A confirma y NUNCA dispara ni rebota.
-    const buttons = [...overlay.querySelectorAll('button')].filter(b => !b.disabled && b.getClientRects().length);
-    if (pad.move && buttons.length) {
-      const index = buttons.indexOf(document.activeElement);
-      buttons[(index < 0 ? 0 : (index + pad.move + buttons.length) % buttons.length)].focus();
+    const controls = [...overlay.querySelectorAll('button, select')].filter(node => !node.disabled && node.getClientRects().length);
+    if (pad.move && controls.length) {
+      const index = controls.indexOf(document.activeElement);
+      controls[(index < 0 ? 0 : (index + pad.move + controls.length) % controls.length)].focus();
     }
     if (pad.pressed.confirm) {
       sfx.unlock();
-      const focused = buttons.includes(document.activeElement) ? document.activeElement :
+      const focused = controls.includes(document.activeElement) ? document.activeElement :
         overlay.querySelector('button.primary:not(:disabled)');
-      focused?.click();
+      if (focused?.tagName === 'SELECT') {
+        const options = [...focused.options].filter(option => !option.disabled);
+        const index = options.indexOf(focused.selectedOptions[0]);
+        focused.value = options[(index + 1) % options.length]?.value ?? focused.value;
+        focused.dispatchEvent(new Event('change', { bubbles: true }));
+      } else focused?.click();
     }
     return;
   }
@@ -1917,8 +1929,8 @@ function updateController(now) {
       interact: !!pad.tactical?.interact,
     };
     // □/X cicla SOLO armas disponibles (las especiales exigen munición).
-    if (state.tactical && pad.pressed.weapon) cycleWeaponAmmo(1);
-    if (state.tactical && pad.assteroids) {
+    if (state.tactical && state.mode === 'koth' && pad.pressed.weapon) cycleWeaponAmmo(1);
+    if (state.tactical && state.mode === 'koth' && pad.assteroids) {
       if (pad.pressed.selectAuto) selectWeapon('auto');
       if (pad.pressed.selectSniper || pad.pressed.sniper) selectWeapon('sniper');
       if (pad.pressed.selectBoomer) selectWeapon('boomer');
@@ -1939,6 +1951,7 @@ function toggleMute() {
 // ───────────────────────────────────────────────── LAB CIUDADELA (armas y flancos)
 /** Selección ABSOLUTA de arma (1/2/3/4, □/X cicla, rueda del ratón). */
 function selectWeapon(next, { announce = true } = {}) {
+  if (state.mode !== 'koth') return;
   const wanted = sanitizeInputIntent({ weapon: next }).weapon;
   // Las especiales solo se equipan con munición de pad recogida (autoridad del
   // servidor: si el servidor no la reconoce, la vista vuelve a `auto`).
@@ -1954,7 +1967,16 @@ function selectWeapon(next, { announce = true } = {}) {
     toast(`${info.short} · ${info.label}`, 1600);
   }
   sfx.ui();
+  revealWeaponStrip();
   renderWeaponUi();
+}
+
+let weaponStripTimer = null;
+function revealWeaponStrip(ms = 1800) {
+  if (!state.tactical || state.mode !== 'koth') return;
+  show(el.weaponStrip, true);
+  clearTimeout(weaponStripTimer);
+  weaponStripTimer = setTimeout(() => show(el.weaponStrip, false), ms);
 }
 
 /** Cicla armas DISPONIBLES (nunca deja el arma en una especial vacía). */
@@ -2034,9 +2056,13 @@ function buildWeaponUi() {
 /** Muestra u oculta el HUD táctico según `tac.on` confirmado por el servidor. */
 function renderTacticalUi() {
   const on = state.tactical;
+  const showWeapons = on && state.mode === 'koth';
   document.documentElement.classList.toggle('tac-mode', on);
-  show(el.weaponStrip, on);
-  show(el.weaponVital, on);
+  if (!showWeapons) {
+    clearTimeout(weaponStripTimer);
+    show(el.weaponStrip, false);
+  }
+  show(el.weaponVital, showWeapons);
   show(el.chaosArmoryBtn, on && state.mode === 'chaos' && state.phase === 'playing');
   show(el.chaosArmoryTop, on && state.mode === 'chaos' && state.phase === 'playing');
   show(el.dashVital, on);
@@ -2409,8 +2435,9 @@ function updateHud(dt, view) {
   hudAcc += dt;
   const snap = state.latest;
   if (!snap) return;
-  if (state.tacticalUiOn !== state.tactical) {
+  if (state.tacticalUiOn !== state.tactical || state.tacticalUiMode !== state.mode) {
     state.tacticalUiOn = state.tactical;
+    state.tacticalUiMode = state.mode;
     renderTacticalUi();
   }
 
@@ -2435,6 +2462,9 @@ function updateHud(dt, view) {
       state.ammoSig = ammoSig;
       renderWeaponUi();
     }
+    const canEnd = state.host === state.selfId && (state.phase === 'playing' || state.phase === 'countdown');
+    show(el.endGameBtn, canEnd);
+    show(el.endGameHelpBtn, canEnd);
 
     // Marcador según modo: colina, bajas por equipo, líder/segundo o puntos y
     // oleada compartidos. Las barras usan el objetivo real de cada columna.
@@ -2639,6 +2669,14 @@ $('rematch-btn').addEventListener('click', () => {
   sfx.ui();
   $('rematch-info').textContent = 'Voto enviado. La revancha empieza cuando voten todos (o el anfitrión la fuerce).';
 });
+
+function endCurrentGame() {
+  if (state.phase !== 'playing' && state.phase !== 'countdown') return;
+  net.send({ t: 'end_game' });
+  toast('Terminando partida…', 1200);
+}
+el.endGameBtn.addEventListener('click', endCurrentGame);
+el.endGameHelpBtn.addEventListener('click', endCurrentGame);
 
 function leaveRoom() {
   net.close();
